@@ -50,9 +50,14 @@ python generator/train_generator.py
 python detector/train_detector.py
 
 
-Since i am unable to upload Offline AI models please run the train detector and train generator python codes before the Main code so that the Ai models can be trained and saved online and feel free to use the data i have given or pick one from kaggel 
+Since i am unable to upload Offline AI models
+please run the train detector and train generator python codes
+before the Main code so that the
+Ai models can be trained and saved online and
+feel free to use the data i have given or pick one from kaggel 
 ENJOY!!!
 
+if you have any questions you can contact me at my www.linkedin.com/in/hamza-yousuf-6a8b1334a account 
 
 Make sure your data is cleaned and located in data/processed/balanced_cleaned_emails.csv
 
