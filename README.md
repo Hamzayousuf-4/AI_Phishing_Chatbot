@@ -49,13 +49,8 @@ python generator/train_generator.py
 # BERT Detector
 python detector/train_detector.py
 
-
-Since i am unable to upload Offline AI models
-please run the train detector and train generator python codes
-before the Main code so that the
-Ai models can be trained and saved online and
-feel free to use the data i have given or pick one from kaggel 
-ENJOY!!!
+⚠️ Note: The GPT-2 and BERT fine-tuned models are not included due to file size limits. 
+You can retrain them using the provided `train_generator.py` and `train_detector.py` scripts 
 
 if you have any questions you can contact me at my www.linkedin.com/in/hamza-yousuf-6a8b1334a account 
 
