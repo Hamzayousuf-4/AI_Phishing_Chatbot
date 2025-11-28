@@ -1,46 +1,84 @@
 import pandas as pd
-import os
+import torch
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, Trainer, TrainingArguments, DataCollatorForLanguageModeling
 
-# Paths
-input_file = "data/raw/CEAS_08.csv"
-output_file = "data/processed/balanced_cleaned_emails.csv"
+# ============================================================
+# 1. LOAD CLEANED + BALANCED EMAILS
+# ============================================================
+csv_path = "data/processed/balanced_cleaned_emails.csv"
+df = pd.read_csv(csv_path)
 
-# Load CSV
-df = pd.read_csv(input_file)
+# TRAIN ONLY ON PHISHING EMAILS
+phishing_emails = df[df["label"] == 1]["text"].tolist()
 
-# Fill NaN and combine 'subject' and 'body' into 'text'
-df['subject'] = df['subject'].fillna('')
-df['body'] = df['body'].fillna('')
-df['text'] = df['subject'].astype(str) + ' ' + df['body'].astype(str)
+print(f"Loaded {len(phishing_emails)} phishing emails for training.")
 
-# Filter to keep only rows with label 0 or 1
-df = df[df['label'].isin([0, 1])]
+# ============================================================
+# 2. LOAD TOKENIZER & MODEL
+# ============================================================
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+tokenizer.pad_token = tokenizer.eos_token
 
-# Drop rows with known noisy/log content
-noise_keywords = [
-    "clamav", "virustotal", "submission-id", "author:", "svn commit", "log message:",
-    "trojan.spy", "virus name alias", "added: no", "spamassassin", "svn", ".py", ".cvd"
-]
-pattern = '|'.join(noise_keywords)
-df = df[~df['text'].str.lower().str.contains(pattern, na=False)]
+model = GPT2LMHeadModel.from_pretrained("gpt2")
 
-# Drop empty or whitespace-only emails
-df = df[df['text'].str.strip().astype(bool)]
+# ============================================================
+# 3. DATASET CLASS
+# ============================================================
+class EmailDataset(torch.utils.data.Dataset):
+    def __init__(self, texts, tokenizer):
+        self.encodings = tokenizer(
+            texts,
+            truncation=True,
+            padding=True,
+            max_length=256,
+        )
 
-# Drop duplicates
-df = df.drop_duplicates(subset=['text'])
+    def __getitem__(self, idx):
+        input_ids = torch.tensor(self.encodings["input_ids"][idx])
+        attention_mask = torch.tensor(self.encodings["attention_mask"][idx])
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": input_ids}
 
-# Print cleaned label distribution
-print("\n📊 Label value counts after cleaning:")
-print(df['label'].value_counts())
+    def __len__(self):
+        return len(self.encodings["input_ids"])
 
-# Balance dataset to 9182 phishing + 9182 legitimate
-phishing_df = df[df['label'] == 1].sample(n=9182, random_state=42)
-legit_df = df[df['label'] == 0].sample(n=9182, random_state=42)
-balanced_df = pd.concat([phishing_df, legit_df]).sample(frac=1, random_state=42)
+dataset = EmailDataset(phishing_emails, tokenizer)
 
-# Save to CSV
-os.makedirs("data/processed", exist_ok=True)
-balanced_df[['text', 'label']].to_csv(output_file, index=False)
+# ============================================================
+# 4. TRAINING SETTINGS
+# ============================================================
+training_args = TrainingArguments(
+    output_dir="generator_model",
+    overwrite_output_dir=True,
+    num_train_epochs=3,
+    per_device_train_batch_size=2,
+    learning_rate=5e-5,
+    weight_decay=0.01,
+    logging_steps=50,
+    save_steps=500,
+    warmup_steps=100,
+)
 
-print(f"\n✅ Cleaned and balanced dataset saved to: {output_file}")
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm=False  # GPT-style training
+)
+
+# ============================================================
+# 5. TRAINER
+# ============================================================
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset,
+    data_collator=data_collator,
+)
+
+# ============================================================
+# 6. TRAIN & SAVE MODEL
+# ============================================================
+trainer.train()
+
+model.save_pretrained("generator_model")
+tokenizer.save_pretrained("generator_model")
+
+print("\n✅ GPT-2 phishing email generator trained and saved successfully!")
